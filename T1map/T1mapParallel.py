@@ -3,9 +3,13 @@ import copy
 import itertools
 from tqdm import tqdm
 import time
+import warnings
 from scipy import optimize
 import multiprocessing
 from joblib import Parallel, delayed
+
+warnings.simplefilter(action='ignore', category=RuntimeWarning)
+
 
 def t1_3params(t, p):
     c, k, t1 = p
@@ -31,7 +35,7 @@ class MOLLIT1mapParallel:
             # mask out the air and region outside the mask
         if (max(dvec) < 10) or (self.mask[tx, ty] == 0):
             # print(f"MSE fitting: (tx, ty) = ({tx}, {ty}), continue")
-            return None, None, None, None, None
+            return None
         
         # mask out the air and region outside the mask
 
@@ -51,7 +55,7 @@ class MOLLIT1mapParallel:
         else:
             raise NotImplementedError
         # print(f"MSE fitting: (tx, ty) = ({tx}, {ty}), SD = {SD}, p = {pres}")
-        return pres, SD, nl, tx, ty
+        return pred_mse, pres, SD, nl, tx, ty
         
 
     def mestimation_abs(self, tvec=None, frames=None, mask=None):
@@ -78,7 +82,7 @@ class MOLLIT1mapParallel:
         tvec_index = np.argsort(tvec)
         self.tvec_sorted = tvec[tvec_index]
         self.frames_sorted = frames[:, :, tvec_index]
-
+        self.inversion_recovery = np.zeros((H, W, L))
         # pixel-wise fitting
         start = time.time()
         items = itertools.product(range(H), range(W))
@@ -86,15 +90,16 @@ class MOLLIT1mapParallel:
         processed_list = Parallel(n_jobs=num_cores)(delayed(self.helper)(i) for i in items)
         et = time.time()
         print(f"Time elapsed: {(et - start)/60} mins")
-        for result in processed_list: 
-            pres, SD, nl, tx, ty = result   
-            if pres is not None:
+        for result in processed_list:   
+            if result is not None:
+                pred_mse, pres, SD, nl, tx, ty = result 
                 self.null_index[tx, ty] = nl;
                 self.S[tx, ty] = SD;
+                self.inversion_recovery[tx, ty, :] = pred_mse
                 pmap[tx, ty, :] = pres
                 sdmap[tx, ty] = self.MOLLIComputeSD(pres, self.tvec_sorted, SD)
 
-        return pmap, sdmap, self.null_index, self.S    
+        return self.inversion_recovery, pmap, sdmap, self.null_index, self.S    
 
     def polarity_recovery_fitting(self, t_vec, data_vec, p0=[150, 2, 1000]):
         """Fits a 3-parameter T1 model s(t) = c * ( 1- k * exp(-t/T1) ) by grid search.
