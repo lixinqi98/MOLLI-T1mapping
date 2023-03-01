@@ -4,6 +4,7 @@ import pickle
 import scipy.io as sio
 from T1map import MOLLIT1map
 from T1mapParallel import MOLLIT1mapParallel
+import calc_t1map_py as t1_py
 
 def load_orig_file(mat_fname):
     mat_contents = sio.loadmat(mat_fname)
@@ -19,12 +20,18 @@ if __name__ == "__main__":
     tvec, frames = load_orig_file(filename)
     print(tvec.shape)
     t1map = MOLLIT1mapParallel()
-    pmap, sdmap, null_index, S = t1map.mestimation_abs(tvec, frames)
-    re = {}
-    re['pmap'] = pmap
-    re['sdmap'] = sdmap
-    re['null_index'] = null_index
-    re['S'] = S
+    inversion_img, pmap, sdmap, null_index, S = t1map.mestimation_abs(tvec, frames)
+    t1_params_pre = t1_py.calculate_T1map(frames, tvec)
+    a = t1_params_pre[:, :, 0]
+    b = t1_params_pre[:, :, 1]
+    c = t1_params_pre[:, :, 2]
+    t1 = (1 / b) * (a / (a + c) - 1)
+
+    # re = {}
+    # re['pmap'] = pmap
+    # re['sdmap'] = sdmap
+    # re['null_index'] = null_index
+    # re['S'] = S
     with open('filename.pickle', 'wb') as handle:
-        pickle.dump(re, handle)
+        pickle.dump(t1, handle)
     
