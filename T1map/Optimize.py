@@ -39,7 +39,12 @@ class Optimize:
         weight = np.nan_to_num(weight)
         return weight
 
-        
+
+    def value_threshold(self, data, threshold=2000):
+        maps = np.zeros(data.shape)
+        maps[data <= threshold] = 1
+        return maps
+    
 
     def synthesis_gradient(self, data, sigma=1, order=2):
         gradient = gaussian_filter(data, sigma=sigma, order=order)
@@ -52,10 +57,11 @@ class Optimize:
 
     def energy_derivative(self, I, M, S, alpha=1, beta=1):
         w = self.correlation_coefficient(I)
-        np.nan_to_num(w)
+        # np.nan_to_num(w)
         second_order_derivative = self.synthesis_gradient(M)
         w_t = np.repeat(w[..., np.newaxis], I.shape[-1], axis=-1)
-        tmp = alpha * w_t * second_order_derivative - (1 + beta) * M + I + beta * S
+        v_t = self.value_threshold(M, threshold=2000)
+        tmp = v_t * (alpha * w_t * second_order_derivative - (1 + beta) * M + I + beta * S)
         return tmp
 
     
