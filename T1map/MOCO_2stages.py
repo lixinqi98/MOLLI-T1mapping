@@ -51,7 +51,7 @@ if __name__ == '__main__':
         revert_stage2 = np.load(f"{outputfolder}/register_2.npy")
     else:
     
-        for file in glob.glob(os.path.join(__file__, 'PostconT1w/*')):
+        for file in glob.glob(os.path.join(__file__, 'PostconT1w/POSTCON*')):
             scans = glob.glob(os.path.join(file, '*.IMA'))
             subject = Path(file).stem
             subjectid = int(re.findall(r'\d+', subject)[0])
@@ -109,16 +109,19 @@ if __name__ == '__main__':
         
         np.save(f"{outputfolder}/register_1.npy", revert_stage1)
         np.save(f"{outputfolder}/register_2.npy", revert_stage2)
-    sitk.Show(sitk.GetImageFromArray(
-        revert_stage1.transpose(2, 0, 1)), 'Stage1')
-    sitk.Show(sitk.GetImageFromArray(
-        revert_stage2.transpose(2, 0, 1)), 'Stage2')
-    sitk.Show(sitk.GetImageFromArray(
-        (revert_stage2 - revert_stage1).transpose(2, 0, 1)), 'Diff')
+    try:
+        sitk.Show(sitk.GetImageFromArray(
+            revert_stage1.transpose(2, 0, 1)), 'Stage1')
+        sitk.Show(sitk.GetImageFromArray(
+            revert_stage2.transpose(2, 0, 1)), 'Stage2')
+        sitk.Show(sitk.GetImageFromArray(
+            (revert_stage2 - revert_stage1).transpose(2, 0, 1)), 'Diff')
+    except:
+        print("No GUI available")
 
     # print(files)
-    for file in glob.glob(os.path.join(__file__, 'PostconT1/*')):
-        scans = glob.glob(os.path.join(file, '*.IMA'))[0]
+    for file in glob.glob(os.path.join(__file__, 'PostconT1/POSTCON*')):
+        scans = glob.glob(os.path.join(file, 'POSTCON*.IMA'))[0]
         subject = Path(file).stem
 
         img = pydicom.dcmread(scans)
