@@ -9,12 +9,61 @@ import torch.nn.functional as F
 from T1mapParallel import MOLLIT1mapParallel
 from utils import *
 import SimpleITK as sitk
+
+def gradient_kernel_3d(method='default', axis=0):
+
+    if method == 'default':
+        kernel_3d = np.array([[[0, 0, 0],
+                               [0, -1, 0],
+                               [0, 0, 0]],
+                              [[0, 0, 0],
+                               [0, 0, 0],
+                               [0, 0, 0]],
+                              [[0, 0, 0],
+                               [0, +1, 0],
+                               [0, 0, 0]]])
+    elif method == 'sobel':
+        kernel_3d = np.array([[[-1, -3, -1],
+                               [-3, -6, -3],
+                               [-1, -3, -1]],
+                              [[0, 0, 0],
+                               [0, 0, 0],
+                               [0, 0, 0]],
+                              [[+1, +3, +1],
+                               [+3, +6, +3],
+                               [+1, +3, +1]]])
+    elif method == 'prewitt':
+        kernel_3d = np.array([[[-1, -1, -1],
+                               [-1, -1, -1],
+                               [-1, -1, -1]],
+                              [[0, 0, 0],
+                               [0, 0, 0],
+                               [0, 0, 0]],
+                              [[+1, +1, +1],
+                               [+1, +1, +1],
+                               [+1, +1, +1]]])
+    elif method == 'isotropic':
+        kernel_3d = np.array([[[-1, -1, -1],
+                               [-1, -np.sqrt(2), -1],
+                               [-1, -1, -1]],
+                              [[0, 0, 0],
+                               [0, 0, 0],
+                               [0, 0, 0]],
+                              [[+1, +1, +1],
+                               [+1, +np.sqrt(2), +1],
+                               [+1, +1, +1]]])
+    else:
+        raise ValueError('unsupported method (got {})'.format(method))
+
+    return np.moveaxis(kernel_3d, 0, axis)
+
 class Optimize:
-    def __init__(self, device='cpu') -> None:
+    def __init__(self, threshold, device='cpu') -> None:
         self.t1map = MOLLIT1mapParallel()
         self.device = device
         self.grad_u_kernel = gradient_kernel_3d(method="default", axis=0)
         self.grad_v_kernel = gradient_kernel_3d(method="default", axis=1)
+        self.threshold = threshold
 
     def save_data(self, I, S):
         self.I = I
@@ -40,7 +89,7 @@ class Optimize:
         return weight
 
 
-    def value_threshold(self, data, threshold=2000):
+    def value_threshold(self, data, threshold):
         maps = np.zeros(data.shape)
         maps[data <= threshold] = 1
         return maps
@@ -60,7 +109,7 @@ class Optimize:
         # np.nan_to_num(w)
         second_order_derivative = self.synthesis_gradient(M)
         w_t = np.repeat(w[..., np.newaxis], I.shape[-1], axis=-1)
-        v_t = self.value_threshold(M, threshold=2000)
+        v_t = self.value_threshold(M, threshold=self.threshold)
         tmp = v_t * (alpha * w_t * second_order_derivative - (1 + beta) * M + I + beta * S)
         return tmp
 
