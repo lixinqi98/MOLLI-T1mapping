@@ -40,15 +40,15 @@ if __name__ == '__main__':
 
 
     outputfolder = f"{__file__}/registration"
-    shutil.rmtree(f"{outputfolder}/stage1", ignore_errors=True)
-    shutil.rmtree(f"{outputfolder}/stage2", ignore_errors=True)
+    # shutil.rmtree(f"{outputfolder}/stage1", ignore_errors=True)
+    # shutil.rmtree(f"{outputfolder}/stage2", ignore_errors=True)
     os.makedirs(f"{outputfolder}/stage1", exist_ok=True)
     os.makedirs(f"{outputfolder}/stage2", exist_ok=True)
 
     rang = 96 // 2
     if os.path.exists(f"{outputfolder}/register_1.npy"):
-        revert_matrix = np.load(f"{outputfolder}/register_1.npy")
-        revert_corr = np.load(f"{outputfolder}/register_2.npy")
+        revert_stage1 = np.load(f"{outputfolder}/register_1.npy")
+        revert_stage2 = np.load(f"{outputfolder}/register_2.npy")
     else:
     
         for file in glob.glob(os.path.join(__file__, 'PostconT1w/*')):
@@ -104,7 +104,7 @@ if __name__ == '__main__':
 
         revert_matrix = np.zeros_like(registered_intra[-1])
         revert_corr = np.zeros_like(registered_intra[-1])
-        revert_stage2 = registered_intra[2]
+        revert_stage2 = registered_intra[-1]
         revert_stage1 = corr_t1
         
         np.save(f"{outputfolder}/register_1.npy", revert_stage1)
