@@ -120,8 +120,8 @@ if __name__ == '__main__':
         print("No GUI available")
 
     # print(files)
-    for file in glob.glob(os.path.join(__file__, 'PostconT1/POSTCON*')):
-        scans = glob.glob(os.path.join(file, 'POSTCON*.IMA'))[0]
+    for file in glob.glob(os.path.join(__file__, 'PostconT1/*')):
+        scans = glob.glob(os.path.join(file, '*.IMA'))[0]
         subject = Path(file).stem
 
         img = pydicom.dcmread(scans)
