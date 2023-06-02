@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import argparse
 import copy
 import glob
@@ -8,12 +7,13 @@ import shutil
 import warnings
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pydicom
 import SimpleITK as sitk
-
 from utils import *
+
 warnings.filterwarnings("ignore")
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 
@@ -38,7 +38,6 @@ if __name__ == '__main__':
     print(timeino, len(timeino))
     postT1w = {}
 
-
     outputfolder = f"{__file__}/registration"
     # shutil.rmtree(f"{outputfolder}/stage1", ignore_errors=True)
     # shutil.rmtree(f"{outputfolder}/stage2", ignore_errors=True)
@@ -50,12 +49,12 @@ if __name__ == '__main__':
         revert_stage1 = np.load(f"{outputfolder}/register_1.npy")
         revert_stage2 = np.load(f"{outputfolder}/register_2.npy")
     else:
-    
+
         for file in glob.glob(os.path.join(__file__, 'PostconT1w/POSTCON*')):
             scans = glob.glob(os.path.join(file, '*.IMA'))
             subject = Path(file).stem
             subjectid = int(re.findall(r'\d+', subject)[0])
-            
+
             print(f"{subject} - {subjectid} in processing")
             T1w_scans = []
             tvec = []
@@ -106,7 +105,7 @@ if __name__ == '__main__':
         revert_corr = np.zeros_like(registered_intra[-1])
         revert_stage2 = registered_intra[-1]
         revert_stage1 = corr_t1
-        
+
         np.save(f"{outputfolder}/register_1.npy", revert_stage1)
         np.save(f"{outputfolder}/register_2.npy", revert_stage2)
     try:
@@ -125,14 +124,14 @@ if __name__ == '__main__':
         subject = Path(file).stem
 
         img = pydicom.dcmread(scans)
-        idx = int(subject.split('_')[0][7:])
+        idx = int(re.findall(r'\d+', subject)[0])
         iddx = sorted(series).index(idx)
         print(subject, idx, iddx)
         data = revert_stage1[:, :, iddx]
         img_data = img.pixel_array
         x = img_data.shape[0]//2
         y = img_data.shape[1]//2
-        img_data[x-rang:x+rang,y-rang:y+rang] = data
+        img_data[x-rang:x+rang, y-rang:y+rang] = data
         img.PixelData = img_data.tobytes()
         os.makedirs(f"{outputfolder}/stage1/{subject}", exist_ok=True)
         img.save_as(os.path.join(
@@ -142,7 +141,7 @@ if __name__ == '__main__':
         data = revert_stage2[:, :, iddx]
         img = pydicom.dcmread(scans)
         img_data = img.pixel_array
-        img_data[x-rang:x+rang,y-rang:y+rang] = data
+        img_data[x-rang:x+rang, y-rang:y+rang] = data
         img.PixelData = img_data.tobytes()
         os.makedirs(f"{outputfolder}/stage2/{subject}", exist_ok=True)
         img.save_as(os.path.join(
