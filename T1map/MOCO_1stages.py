@@ -110,8 +110,9 @@ if __name__ == '__main__':
         print(subject, idx, iddx)
         data = revert_stage1[:, :, iddx]
         img_data = img.pixel_array
-        img_data[orig_img_arrays.shape[0]//2-rang:orig_img_arrays.shape[0]//2+rang,
-                 orig_img_arrays.shape[1]//2-rang:orig_img_arrays.shape[1]//2+rang] = data
+        x = img_data.shape[0]//2
+        y = img_data.shape[1]//2
+        img_data[x-rang:x+rang, y-rang:y+rang] = data
         img.PixelData = img_data.tobytes()
         os.makedirs(f"{outputfolder}/stage1/{subject}", exist_ok=True)
         img.save_as(os.path.join(
@@ -121,8 +122,7 @@ if __name__ == '__main__':
         data = revert_stage2[:, :, iddx]
         img = pydicom.dcmread(scans)
         img_data = img.pixel_array
-        img_data[orig_img_arrays.shape[0]//2-rang:orig_img_arrays.shape[0]//2+rang,
-                 orig_img_arrays.shape[1]//2-rang:orig_img_arrays.shape[1]//2+rang,] = data
+        img_data[x-rang:x+rang, y-rang:y+rang] = data
         img.PixelData = img_data.tobytes()
         os.makedirs(f"{outputfolder}/stage2/{subject}", exist_ok=True)
         img.save_as(os.path.join(

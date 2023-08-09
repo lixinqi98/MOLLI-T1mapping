@@ -1,3 +1,14 @@
+# ignore data
+*.ima
+*.mat
+*.pdf
+
+# ignore DCE
+DCE_Original/*
+DCE_MOCO/*
+
+# ignore temorary mat file
+*.asv
 
 **/.DS_Store
 # Byte-compiled / optimized / DLL files

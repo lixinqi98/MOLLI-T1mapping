@@ -12,6 +12,7 @@ import sys
 import warnings
 import copy
 import pickle
+from tqdm import tqdm
 import skimage.morphology as sm
 import time
 
@@ -39,31 +40,33 @@ def calc_t1value(j, ir_img, inversiontime):
     for tino in range(nti):
         y[tino] = ir_img[r,c,tino]
 
-    yf = copy.copy(y)
     sq_err = 100000000.0
     curve_fit_success = False
 
     if nti == 3:
-        iter = 1
+        iter = 2
     else:
-        iter = 5
+        iter = 6
     for nsignflip in range(iter):
         # print(nsignflip)
+        yf = copy.deepcopy(y)
         if nsignflip == 0:
-            yf[0] = -y[0]
+            yf[0] = y[0]
         elif nsignflip == 1:
             yf[0] = -y[0]
-            yf[1] = -y[1]
         elif nsignflip == 2:
             yf[0] = -y[0]
             yf[1] = -y[1]
-            yf[2] = -y[2]
         elif nsignflip == 3:
             yf[0] = -y[0]
             yf[1] = -y[1]
             yf[2] = -y[2]
-            yf[3] = -y[3]
         elif nsignflip == 4:
+            yf[0] = -y[0]
+            yf[1] = -y[1]
+            yf[2] = -y[2]
+            yf[3] = -y[3]
+        elif nsignflip == 5:
             yf[0] = -y[0]
             yf[1] = -y[1]
             yf[2] = -y[2]
@@ -72,7 +75,7 @@ def calc_t1value(j, ir_img, inversiontime):
         try:
             popt,pcov = curve_fit(func_orig, inversiontime, yf, p0=p0_initial)
         except RuntimeError:
-            # print("Error - curve_fit failed")
+            # print(f"Error - curve_fit failed, y: {yf}, x: {inversiontime}")
             # curve_fit_success = False
             popt = p0_initial
 
@@ -82,8 +85,18 @@ def calc_t1value(j, ir_img, inversiontime):
 
         yf_est = func_orig(inversiontime, a1, b1, c1)
         sq_err_curr = np.sum((yf_est - yf)**2, dtype=np.float32)
+        if r == 48 and c == 52:
+            print(f"Error: sq_err_curr: {sq_err_curr} and yf_est {yf_est}")
+        if sq_err_curr < 1e-1:
+            curve_fit_success = True
+            sq_err = sq_err_curr
+            a1_opt = a1
+            b1_opt = b1
+            c1_opt = c1
+            sq_reside = np.median(np.abs(yf_est - yf))
+            return a1_opt, b1_opt, c1_opt, sq_reside
 
-        if sq_err_curr < sq_err:
+        if (sq_err - sq_err_curr) > 1e2:
             curve_fit_success = True
             sq_err = sq_err_curr
             a1_opt = a1
@@ -112,9 +125,11 @@ def calculate_T1map(ir_img, inversiontime):
         if nti > nTI:
             ir_img = ir_img[:,:,0:nTI]
 
-    for j in range(nx*ny):
+    for j in tqdm(range(nx*ny)):
         r = int(j / ny)
         c = int(j % ny)
+        if r == 43 and c == 44:
+            print('stop')
         p1, p2, p3, err = calc_t1value(j, ir_img, inversiontime)
         t1map[r, c, :] = [p1, p2, p3]
         sqerrmap[r, c] = err

@@ -24,18 +24,28 @@ def round_optimize_stage1(frames, tvec, threshold=2000, rounds=3):
     for round in range(rounds):
         print(f"round {round}")
         if round == 0:
-            tvec_r = np.array([tvec[0], tvec[-2], tvec[-1]])
+            tvec_r = np.array([tvec[0], tvec[1], tvec[-1]])
             frames_r = np.dstack(
-                [frames[..., 0], frames[..., -2], frames[..., -1]])
+                [frames[..., 0], frames[..., 1], frames[..., -1]])
         else:
             tvec_r = tvec
             frames_r = registered_r
         inversion_recovery_img, T1, T1err = t1fitting_inter(
             frames_r, tvec_r, tvec)
+        
+        # for images where t1 < 0, which means bad t1 fitting, change back to original value
+        mask = copy.deepcopy(T1)
+        mask[mask > 0] = 0
+        mask[mask < 0] = 1
+        mask = mask.astype('bool')
+        if round == 0:
+            inversion_recovery_img[mask, :] = frames[mask, :]
+        else:
+            inversion_recovery_img[mask, :] = registered_r[mask, :]
 
         S = inversion_recovery_img
         M = np.abs(inversion_recovery_img)
-        if round <= 3:
+        if round <= 2:
             step_size = -0.1
         else:
             step_size = -0.05
@@ -115,7 +125,7 @@ def t1fitting_intra(ini_frames, ini_tvec, tvec):
     t1_params_pre, sqerrormap = t1_intra.calculate_T1map(ini_frames, ini_tvec)
 
     a = t1_params_pre[:, :, 0]
-    b = t1_params_pre[:, :, 1]
+    b = t1_params_pre[:, :, 1] + 1e-10
     c = t1_params_pre[:, :, 2]
     t1 = (1 / b) * (a / (a + c) - 1)
     # t1 = a * (1 - np.exp(-x / b)) + c
@@ -147,9 +157,16 @@ def synthetic(I, S, M, threshold, step_size=-0.1, iter=3, alpha=1, beta=1):
 
 def register(fixed, moving):
     registered = np.zeros_like(fixed)
+    threshold = 500
     for slice in range(fixed.shape[2]):
-        im1 = ants.from_numpy(fixed[:, :, slice])
-        im2 = ants.from_numpy(moving[:, :, slice])
+        
+        diff = moving[:, :, slice] - fixed[:, :, slice]
+        mask = np.abs(diff)
+        mask[mask < threshold] = 1
+        mask[mask >= threshold] = 0
+        mask = mask.astype('bool')
+        im1 = ants.from_numpy(fixed[:, :, slice] * mask)
+        im2 = ants.from_numpy(moving[:, :, slice] * mask)
         reg12 = ants.registration(
             fixed=im1, moving=im2, type_of_transform='SyN')
         registered[:, :, slice] = reg12['warpedmovout'].numpy()
