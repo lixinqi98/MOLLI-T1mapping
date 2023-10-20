@@ -6,26 +6,43 @@ contributors: Yoon-Chul Kim, Khu Rai Kim, Hyelee Lee
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
-import os
-import sys
-import warnings
 import copy
-import pickle
-import skimage.morphology as sm
-import time
 
-from skimage import data, io, filters
-from numpy import arange, sin, pi
 from scipy.optimize import curve_fit
 from scipy import optimize
-from math import floor, sqrt
 
+# Y0 = 0
+# Plateau = 2000
 
 def func_orig(x, a, b, c):
     # return a*(1-np.exp(-b*x)) + c
     return a * (1 - np.exp(- (x / b))) + c
     # return a - b * np.exp(-x / c)
+
+# def dual_fitting(input, PercentFast, KFast, KSlow):
+    
+#     X = input[0:-2]
+#     # print(input, X, Y0, Plateau)
+#     SpanFast=(Plateau - Y0)*PercentFast*.01
+#     SpanSlow=(Plateau - Y0)*(100-PercentFast)*.01
+#     # X = np.sort(x - np.min(x))
+#     # print(Y0, Plateau, X, SpanFast, SpanSlow)
+#     # Y= Plateau - SpanFast*np.exp(-KFast*X) - SpanSlow*np.exp(-KSlow*X)
+#     return Plateau - SpanFast*np.exp(-KFast*X) - SpanSlow*np.exp(-KSlow*X)
+
+def dual_fitting_help(p, *params):
+    X, yf = params
+    Plateau = np.max(yf)
+    Y0 = np.min(yf)
+    PercentFast, KFast, KSlow = p
+    # print(input, X, Y0, Plateau)
+    SpanFast=(Plateau - Y0)*PercentFast*.01
+    SpanSlow=(Plateau - Y0)*(100-PercentFast)*.01
+    # X = np.sort(x - np.min(x))
+    # print(Y0, Plateau, X, SpanFast, SpanSlow)
+    # Y= Plateau - SpanFast*np.exp(-KFast*X) - SpanSlow*np.exp(-KSlow*X)
+    yf_est = Plateau - SpanFast*np.exp(-KFast*X) - SpanSlow*np.exp(-KSlow*X)
+    return np.mean((yf_est - yf)**2)
 
 def t1_3params(t, p):
     c, k, t1 = p
@@ -38,44 +55,57 @@ def rms_3params_fitting(p, *params):
     return np.mean((t1_3params(t, p) - data)**2)
 
 
-def calc_t1value(j, ir_img, inversiontime):
+def calc_t1value(j, ir_img, inversiontime, dual=False):
 
     nx, ny, nti = ir_img.shape
     inversiontime = np.asarray(inversiontime)
     y = np.zeros(nti)
     r = int(j/ny)
     c = int(j%ny)
-
-    p0_initial = [300, 1000, 50]
-
+    if not dual:
+        p0_initial = [300, 1000, 50]
+    else:
+        # initial guess for dual exponential model
+        p0_initial = [80, 0.001, 0.05]
     for tino in range(nti):
         y[tino] = ir_img[r,c,tino]
     # y = np.sort(y)
-    threshold = 30000
+    threshold = 2000
     
-    yf = copy.copy(y)
+    yf = copy.deepcopy(np.sort(y))
     sq_err = 100000000.0
     curve_fit_success = False
-    if np.mean(yf) < threshold:
-        try:
+    try:
+        if not dual:
             popt,pcov = curve_fit(func_orig, inversiontime, yf, p0=p0_initial)
-            # print("Fitting success")
-            # popt,pcov = curve_fit(func_orig, inversiontime, yf)
-            # minimum = optimize.fmin(rms_3params_fitting, x0=p0_initial, args=(
-                # inversiontime, yf), maxfun=2000, disp=False, full_output=True)
-            # popt = minimum[0]
-        except RuntimeError:
-            # print("Error - curve_fit failed")
-            # curve_fit_success = False
-            popt = p0_initial
-    else:
+        else:
+            # print(f"Use the dual fitting model, {np.append(inversiontime, [np.min(yf), np.max(yf)])}")
+
+            # popt,pcov = curve_fit(dual_fitting, np.append(inversiontime, [np.min(yf), np.max(yf)]), yf, p0=p0_initial)
+        # print("Fitting success")
+        # popt,pcov = curve_fit(func_orig, inversiontime, yf)
+        # minimum = optimize.fmin(dual_fitting, x0=p0_initial, args=(
+        #     inversiontime, yf), maxfun=2000, disp=False, full_output=True)
+            minimum = optimize.fmin(dual_fitting_help, x0=p0_initial, args=(
+                inversiontime, yf), maxfun=2000, disp=True, full_output=True)
+            popt = minimum[0]
+    except RuntimeError:
+        # print("Error - curve_fit failed")
+        # curve_fit_success = False
         popt = p0_initial
+
 
     a1 = popt[0]
     b1 = popt[1]
     c1 = popt[2]
-
-    yf_est = a1 * (1 - np.exp(- (inversiontime / b1))) + c1
+    if not dual:
+        yf_est = a1 * (1 - np.exp(- (inversiontime / b1))) + c1
+    else:
+        Plateau = np.max(yf)
+        Y0 = np.min(yf)
+        SpanFast=(Plateau - Y0)*a1*.01
+        SpanSlow=(Plateau - Y0)*(100-a1)*.01
+        yf_est = a1 - SpanFast*np.exp(-b1*inversiontime) - SpanSlow*np.exp(-c1*inversiontime)
     sq_err_curr = np.sum((yf_est - yf)**2, dtype=np.float32)
 
     if sq_err_curr < sq_err:
@@ -95,7 +125,7 @@ def calc_t1value(j, ir_img, inversiontime):
     return a1_opt, b1_opt, c1_opt, sq_reside
 
 
-def calculate_T1map(ir_img, inversiontime):
+def calculate_T1map(ir_img, inversiontime, dual=False):
     
     nx, ny, nti = ir_img.shape
     t1map = np.zeros([nx, ny, 3])
@@ -110,7 +140,9 @@ def calculate_T1map(ir_img, inversiontime):
     for j in range(nx*ny):
         r = int(j / ny)
         c = int(j % ny)
-        p1, p2, p3, err = calc_t1value(j, ir_img, inversiontime)
+        if r == nx //2 and c == ny //2:
+            print("stop")
+        p1, p2, p3, err = calc_t1value(j, ir_img, inversiontime, dual)
         t1map[r, c, :] = [p1, p2, p3]
         sqerrmap[r, c] = err
 

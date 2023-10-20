@@ -58,7 +58,7 @@ def round_optimize_stage1(frames, tvec, threshold=2000, rounds=3):
     return T1s, T1errs, registereds, update_Ms
 
 
-def round_optimize_stage2(frames, tvec, step_size=0.01, threshold=2000, rounds=3):
+def round_optimize_stage2(frames, tvec, dual=False, step_size=0.01, threshold=2000, rounds=3):
     T1s = []
     T1errs = []
     registereds = []
@@ -73,7 +73,7 @@ def round_optimize_stage2(frames, tvec, step_size=0.01, threshold=2000, rounds=3
         tvec_r = tvec
         frames_r = registered_r
         inversion_recovery_img, T1, T1err = t1fitting_intra(
-            frames_r, tvec_r, tvec)
+            frames_r, tvec_r, tvec, dual)
 
         S = inversion_recovery_img
         M = np.abs(inversion_recovery_img)
@@ -121,8 +121,8 @@ def t1fitting_inter(ini_frames, ini_tvec, tvec):
     return inversion_recovery_img, t1, sqerrormap
 
 
-def t1fitting_intra(ini_frames, ini_tvec, tvec):
-    t1_params_pre, sqerrormap = t1_intra.calculate_T1map(ini_frames, ini_tvec)
+def t1fitting_intra(ini_frames, ini_tvec, tvec, dual=False):
+    t1_params_pre, sqerrormap = t1_intra.calculate_T1map(ini_frames, ini_tvec, dual)
 
     a = t1_params_pre[:, :, 0]
     b = t1_params_pre[:, :, 1] + 1e-10

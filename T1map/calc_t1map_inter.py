@@ -128,8 +128,8 @@ def calculate_T1map(ir_img, inversiontime):
     for j in tqdm(range(nx*ny)):
         r = int(j / ny)
         c = int(j % ny)
-        if r == 43 and c == 44:
-            print('stop')
+        # if r == 43 and c == 44:
+        #     print('stop')
         p1, p2, p3, err = calc_t1value(j, ir_img, inversiontime)
         t1map[r, c, :] = [p1, p2, p3]
         sqerrmap[r, c] = err
