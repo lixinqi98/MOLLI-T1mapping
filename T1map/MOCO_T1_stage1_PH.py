@@ -38,13 +38,13 @@ if __name__ == '__main__':
     __output_base__ = args.output
     threshold = args.threshold
     # threshold = 2000
-    # __input_base__ = '/Users/mona/Library/CloudStorage/Box-Box/Pig_acuteScans_dDCE/Pig_2326_Baseline'
-    # __output_base__ = '/Users/mona/Library/CloudStorage/Box-Box/Pig_acuteScans_dDCE/Pig_2326_Baseline_T1Map_Mona'
+    # __input_base__ = '/Users/mona/Documents/data/registration/patient_v2/015'
+    # __output_base__ = '/Users/mona/Documents/data/registration/patient_v2_mona/015'
     os.makedirs(__output_base__, exist_ok=True)
 
-    rang = 96 // 2
+    rang = 160 // 2
 
-    subjects = sorted(glob.glob(os.path.join(__input_base__, 'T1MAP*')))
+    subjects = sorted(glob.glob(os.path.join(__input_base__, 'T1*')))
     for file in subjects:
         if 'MOCO' not in file:
             print(f"{Path(file).name} in processing")
@@ -58,15 +58,16 @@ if __name__ == '__main__':
             if os.path.exists(output_folder):
                 print(f"{file} already processed")
             else:
-                scans = sorted(glob.glob(os.path.join(file, '*.IMA')))
+                scans = sorted(glob.glob(os.path.join(file, '*.dcm')))
 
                 raw_imgs = []
                 for scan in scans:
                     img = pydicom.dcmread(scan)
                     subject = Path(scan).stem
                     T1w_scans.append(img.pixel_array)
-                    tvec.append(float(img.InversionTime))
-                    print(f"The {subject} has inversion time {img.InversionTime}")
+                    inversiontime = float(img[0x2005, 0x1572].value)
+                    tvec.append(inversiontime)
+                    print(f"The {subject} has inversion time {inversiontime}")
                     raw_imgs.append((img, subject))
 
                 tvec = np.array(tvec)
@@ -109,7 +110,7 @@ if __name__ == '__main__':
                 y = img_data.shape[1]//2
                 img_data[x-rang:x+rang, y-rang:y+rang] = data
                 img.PixelData = img_data.tobytes()
-                img.save_as(f"{output_folder_T1}/{idx}.IMA")
+                img.save_as(f"{output_folder_T1}/{Path(file).name}_T1MAP.dcm")
 
                 fig = plot_T1s(T1s)
                 fig.savefig(f"{output_folder_T1}/T1s.png")
