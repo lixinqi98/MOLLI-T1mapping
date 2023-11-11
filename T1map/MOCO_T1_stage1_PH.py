@@ -104,7 +104,7 @@ if __name__ == '__main__':
                 output_folder_T1 = f"{__output_base__}/{Path(file).name}_T1_Mona"
                 os.makedirs(output_folder_T1, exist_ok=True)
                 img, subject = raw_imgs[0]
-                data = registered_map[..., tvec_idx[idx]]
+                data = T1
                 img_data = img.pixel_array
                 x = img_data.shape[0]//2
                 y = img_data.shape[1]//2

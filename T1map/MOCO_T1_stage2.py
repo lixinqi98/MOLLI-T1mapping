@@ -5,7 +5,7 @@ import re
 import shutil
 import warnings
 from pathlib import Path
-
+from collections import OrderedDict
 import numpy as np
 import pandas as pd
 import pydicom
@@ -25,72 +25,75 @@ if __name__ == '__main__':
     parser.add_argument('--threshold', type=int, default=2000)
     parser.add_argument('--minus', type=int, default=44000,
                         help='minus value for acquisition time')
-    parser.add_argument('--clean', type=bool, default=True)
-    parser.add_argument('--verbose', type=bool, default=True,
+    parser.add_argument('--clean', type=bool, default=False)
+    parser.add_argument('--verbose', type=bool, default=False,
                         help='Use ImgShow to visualize the results')
+    parser.add_argument('--label', type=str, default='CE9')
     args = parser.parse_args()
 
     # __file__ = args.input
-    __file__ = '/Users/mona/Documents/data/registration/patient_T1'
-    time_path = os.path.join(__file__, 'acquisitionTime_2_5_8.csv')
+    __file__ = '/Users/mona/Library/CloudStorage/GoogleDrive-xinqili16@g.ucla.edu/My Drive/Registration/patient_Liting_dDCE_Mona/017'
+    time_path = os.path.join(__file__, 'acquisitionTime.csv')
     ac_time_df = pd.read_csv(time_path)
-    ac_time_dict = ac_time_df.to_dict()
-    series = [int(re.findall(r'T1_\d+', value)[0][3:])
-              for value in ac_time_dict['Subject'].values()]
-    timeino = [value for value in ac_time_dict['AcquisitionTime'].values()]
-    print(series, timeino)
+    ac_time_dict = ac_time_df.set_index('Subject').to_dict()['AcquisitionTime']
+
+    key = "PostconT1"
+    label = args.label
+    post_key = f"T1_*{label}*"
+
     if not args.dual:
-        outputfolder = f"{__file__}/registration/single_exp"
+        outputfolder = f"{__file__}/registration/{label}/single_exp"
     else:
         print(f"Use the dual exponential model, {args.dual}")
-        outputfolder = f"{__file__}/registration/dual_exp"
+        outputfolder = f"{__file__}/registration/{label}/dual_exp"
     
     if args.clean:
         shutil.rmtree(outputfolder, ignore_errors=True)
 
-    shutil.rmtree(f"{outputfolder}/stage1", ignore_errors=True)
-    shutil.rmtree(f"{outputfolder}/stage2", ignore_errors=True)
-    os.makedirs(f"{outputfolder}/stage1", exist_ok=True)
-    os.makedirs(f"{outputfolder}/stage2", exist_ok=True)
+        shutil.rmtree(f"{outputfolder}/stage1", ignore_errors=True)
+        shutil.rmtree(f"{outputfolder}/stage2", ignore_errors=True)
+        os.makedirs(f"{outputfolder}/stage1", exist_ok=True)
+        os.makedirs(f"{outputfolder}/stage2", exist_ok=True)
 
     rang = 128 // 2
-    key = "PostconT1_2_5_8"
+    
+
+    postT1w = {}
+    
+    print(glob.glob(os.path.join(__file__, f'{key}/{post_key}')))
+    for file in glob.glob(os.path.join(__file__, f'{key}/{post_key}')):
+        scans = glob.glob(os.path.join(file, '*.dcm'))[0]
+        subject = Path(file).stem
+        img = pydicom.dcmread(scans)
+        timeino = ac_time_dict[subject]
+        postT1w[subject] = (img.pixel_array, int(timeino), scans)
+
+    postT1w = OrderedDict(sorted(postT1w.items(), key=lambda t: t[1][1]))
+    ordered_frames = [img for img, _, _ in postT1w.values()]
+    ordered_times = [time for _, time, _ in postT1w.values()]
+    orig_frames = np.dstack(ordered_frames)  # orig_frames is already sorted based on the key
+    # cropped the images at the center
+    if args.verbose:
+        sitk.Show(sitk.GetImageFromArray(
+            orig_frames.transpose(2, 0, 1)), 'Original Image')
+        print(f"Original image size {orig_frames.shape}")
+    x = orig_frames.shape[0]//2
+    y = orig_frames.shape[1]//2
+    cropped_frames = orig_frames[x-rang:x+rang, y-rang:y+rang, :]
+    if args.verbose:
+        sitk.Show(sitk.GetImageFromArray(
+            cropped_frames.transpose(2, 0, 1)), 'Cropped Image')
+        print(f"Cropped image size {cropped_frames.shape}")
+
+    ac_time = np.array(ordered_times)
+
+    ac_time = ac_time - args.minus
+
     if os.path.exists(f"{outputfolder}/register_stage1.npy"):
         print("Load the registered images")
-        revert_stage1 = np.load(f"{outputfolder}/register_stage1.npy")
-        revert_stage2 = np.load(f"{outputfolder}/register_stage2.npy")
+        matrix_stage1 = np.load(f"{outputfolder}/register_stage1.npy")
+        matrix_stage2 = np.load(f"{outputfolder}/register_stage2.npy")
     else:
-        postT1w = {}
-        
-        print(glob.glob(os.path.join(__file__, f'{key}/*')))
-        for file in glob.glob(os.path.join(__file__, f'{key}/*')):
-            scans = glob.glob(os.path.join(file, '*.dcm'))[0]
-            subject = Path(file).stem
-            subjectid = int(re.findall(r'T1_\d+', subject)[0][3:])
-            print(subjectid)
-            img = pydicom.dcmread(scans)
-            postT1w[subjectid] = img.pixel_array
-
-        postT1w_sorted = dict(sorted(postT1w.items()))
-        orig_frames = np.dstack(list(postT1w_sorted.values()))  # orig_frames is already sorted based on the key
-        # cropped the images at the center
-        if args.verbose:
-            sitk.Show(sitk.GetImageFromArray(
-                orig_frames.transpose(2, 0, 1)), 'Original Image')
-            print(f"Original image size {orig_frames.shape}")
-        x = orig_frames.shape[0]//2
-        y = orig_frames.shape[1]//2
-        cropped_frames = orig_frames[x-rang:x+rang, y-rang:y+rang, :]
-        if args.verbose:
-            sitk.Show(sitk.GetImageFromArray(
-                cropped_frames.transpose(2, 0, 1)), 'Cropped Image')
-            print(f"Cropped image size {cropped_frames.shape}")
-
-        ac_time = np.squeeze(np.asarray(timeino))
-        ac_idx = np.argsort(np.array(series))
-        ac_time = ac_time[ac_idx]
-
-        ac_time = ac_time - args.minus
 
         cropped_frames[cropped_frames >= args.threshold] = 0
 
@@ -110,23 +113,21 @@ if __name__ == '__main__':
         np.save(f"{outputfolder}/register_stage1.npy", matrix_stage1)
         np.save(f"{outputfolder}/register_stage2.npy", matrix_stage1)
 
-        if args.verbose:
-            sitk.Show(sitk.GetImageFromArray(
-                matrix_stage1.transpose(2, 0, 1)), 'Stage1')
-            sitk.Show(sitk.GetImageFromArray(
-                matrix_stage2.transpose(2, 0, 1)), 'Stage2')
-            sitk.Show(sitk.GetImageFromArray(
-                (matrix_stage2 - matrix_stage1).transpose(2, 0, 1)), 'Diff')
+    if args.verbose:
+        sitk.Show(sitk.GetImageFromArray(
+            matrix_stage1.transpose(2, 0, 1)), 'Stage1')
+        sitk.Show(sitk.GetImageFromArray(
+            matrix_stage2.transpose(2, 0, 1)), 'Stage2')
+        sitk.Show(sitk.GetImageFromArray(
+            (matrix_stage2 - matrix_stage1).transpose(2, 0, 1)), 'Diff')
 
-    for file in glob.glob(os.path.join(__file__, f'{key}/*')):
-        scans = glob.glob(os.path.join(file, '*.dcm'))[0]
-        subject = Path(file).stem
+    # for file in glob.glob(os.path.join(__file__, f'{key}/{post_key}')):
 
+    for idx, subject in enumerate(postT1w.keys()):
+        scans = postT1w[subject][2]
         img = pydicom.dcmread(scans)
-        idx = int(re.findall(r'T1_\d+', subject)[0][3:])
-        iddx = sorted(series).index(idx)
-        print(subject, idx, iddx)
-        data = matrix_stage1[:, :, iddx]
+
+        data = matrix_stage1[:, :, idx]
         img_data = img.pixel_array
         x = img_data.shape[0]//2
         y = img_data.shape[1]//2
@@ -137,7 +138,7 @@ if __name__ == '__main__':
             f"{outputfolder}/stage1/{subject}", f"{subject}" + '.dcm'))
         # del img
 
-        data = matrix_stage2[:, :, iddx]
+        data = matrix_stage2[:, :, idx]
         img = pydicom.dcmread(scans)
         img_data = img.pixel_array
         img_data[x-rang:x+rang, y-rang:y+rang] = data
@@ -145,4 +146,6 @@ if __name__ == '__main__':
         os.makedirs(f"{outputfolder}/stage2/{subject}", exist_ok=True)
         img.save_as(os.path.join(
             f"{outputfolder}/stage2/{subject}", f"{subject}" + '.dcm'))
+    
+        print(f"Save the subject {subject}, index {idx}")
 
