@@ -1,17 +1,17 @@
 %% load Dicom
-subjectfolder='/Users/mona/Documents/data/registration/patient_noT1/015';
+subjectfolder='/Users/mona/Library/CloudStorage/GoogleDrive-xinqili16@g.ucla.edu/My Drive/Registration/patient_Liting_dDCE_Mona';
 
 
-PostconFoldername=[subjectfolder,'/PostconT1'];
-listPost=dir(PostconFoldername);
+PostconFoldername=[subjectfolder,'/075'];
+listPost=dir(sprintf('%s/PostconT1/*_MAP_T1_Mona', PostconFoldername));
 timeino_map = containers.Map();
-for n=1:length(listPost)-3
-    [PostconFoldername,filesep,listPost(n+3).name]
-    if isfolder([PostconFoldername,filesep,listPost(n+3).name])
-        DataPost(n)=loaddicom([PostconFoldername,filesep,listPost(n+3).name]);
+for n=1:length(listPost)
+    file = fullfile(listPost(n).folder, listPost(n).name)
+    if isfolder(file)
+        DataPost(n)=loaddicom(file);
         timeinstr{n}=DataPost(n).info.AcquisitionTime;
         timeino(n)=str2num(timeinstr{n}(1:2))*60*60+str2num(timeinstr{n}(3:4))*60+str2num(timeinstr{n}(5:end));%s
-        timeino_map(listPost(n+3).name) = timeino(n);
+        timeino_map(listPost(n).name) = timeino(n);
     end
 end
 
@@ -21,17 +21,19 @@ timeino = cell2mat(values(timeino_map));
 
 t = table(subject', timeino', ...
     'VariableNames',{'Subject', 'AcquisitionTime'});
-writetable(t, fullfile(subjectfolder, 'acquisitionTime.csv'));
+writetable(t, fullfile(PostconFoldername, 'acquisitionTime.csv'));
 
 
 
 %%
 function data = loaddicom(path)
-list=dir(path);
-%if ~(strcmp(‘IMA’,list(3).name(end-2:end)))
-%  fprintf(‘no Dicom in the directory’)
+list=dir(sprintf('%s/*.dcm', path));
+%if ~(strcmp('IMA',list(3).name(end-2:end)))
+
+%  fprintf('no Dicom in the directory')  
 %else
-data.img=dicomread([path,filesep,list(4).name]);
-data.info=dicominfo([path,filesep,list(4).name]);
-%end
+% Mona: change the 3 to 'end', due to exist of .DS_Store
+data.img=dicomread([path,filesep,list(end).name]);
+data.info=dicominfo([path,filesep,list(end).name]);
+
 end
