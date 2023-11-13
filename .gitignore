@@ -2,8 +2,8 @@
 *.ima
 *.mat
 *.pdf
-outputs/*
-
+outputs/
+data/*
 # ignore the ipynb files
 *.ipynb
 # ignore log
