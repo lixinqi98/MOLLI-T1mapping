@@ -1,0 +1,14 @@
+defaults:
+  - override hydra/job_logging: colorlog
+  - override hydra/hydra_logging: colorlog
+
+input: /Users/mona/Library/CloudStorage/Box-Box/Mona/patient_registration_LiTing_Mona/015
+label: CE4
+
+exp: single
+threshold: 2000
+base_actime: 44000
+FOV: 128
+
+clean: True
+verbose: False

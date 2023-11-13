@@ -4,15 +4,16 @@ voxelwise cardiac T1 mapping
 
 contributors: Yoon-Chul Kim, Khu Rai Kim, Hyelee Lee
 """
-
+import logging
+import hydra
 import numpy as np
 import copy
 
 from scipy.optimize import curve_fit
 from scipy import optimize
 
-# Y0 = 0
-# Plateau = 2000
+
+hydralog = logging.getLogger(__name__)
 
 def func_orig(x, a, b, c):
     # return a*(1-np.exp(-b*x)) + c
@@ -140,8 +141,6 @@ def calculate_T1map(ir_img, inversiontime, dual=False):
     for j in range(nx*ny):
         r = int(j / ny)
         c = int(j % ny)
-        if r == nx //2 and c == ny //2:
-            print("stop")
         p1, p2, p3, err = calc_t1value(j, ir_img, inversiontime, dual)
         t1map[r, c, :] = [p1, p2, p3]
         sqerrmap[r, c] = err

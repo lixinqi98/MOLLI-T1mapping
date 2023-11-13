@@ -1,6 +1,8 @@
 import numpy as np
 import copy
 import ants
+import logging
+import hydra
 
 import scipy.io as sio
 import SimpleITK as sitk
@@ -12,6 +14,7 @@ import matplotlib.pyplot as plt
 
 from Optimize import Optimize
 
+hydralog = logging.getLogger(__name__)
 
 def round_optimize_stage1(frames, tvec, threshold=2000, rounds=3):
     T1s = []
@@ -22,7 +25,7 @@ def round_optimize_stage1(frames, tvec, threshold=2000, rounds=3):
     I = copy.copy(frames)
 
     for round in range(rounds):
-        print(f"round {round}")
+        hydralog.info(f"round {round}")
         if round == 0:
             tvec_r = np.array([tvec[0], tvec[1], tvec[-1]])
             frames_r = np.dstack(
@@ -68,7 +71,7 @@ def round_optimize_stage2(frames, tvec, dual=False, step_size=0.01, threshold=20
     I[I >= 2000] = 0
     registered_r = copy.copy(frames)
     for round in range(rounds):
-        print(f"round {round}")
+        hydralog.info(f"round {round}")
 
         tvec_r = tvec
         frames_r = registered_r
@@ -141,12 +144,11 @@ def t1fitting_intra(ini_frames, ini_tvec, tvec, dual=False):
 def synthetic(I, S, M, threshold, step_size=-0.1, iter=3, alpha=1, beta=1):
     opt = Optimize(threshold)
     energy = opt.energy(M, I, S) / np.size(M)
-    print(f"Initial energy = {energy:.3f}")
     for itr in range(iter):
         step = opt.energy_derivative(M, I, S, alpha=alpha, beta=beta)
         new_M = M + step_size * step
         new_energy = opt.energy(new_M, I, S) / np.size(M)
-        print(
+        hydralog.info(
             f"Iteration {itr}: energy = {new_energy:.3f}, diff = {abs(new_energy - energy):.3f}, step = {np.sum(step):.3f}")
         if new_energy > energy:
             break

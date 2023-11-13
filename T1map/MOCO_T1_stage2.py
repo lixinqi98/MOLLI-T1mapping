@@ -1,66 +1,67 @@
 import argparse
 import glob
+import logging
 import os
 import re
 import shutil
 import warnings
-from pathlib import Path
 from collections import OrderedDict
+from pathlib import Path
+
+import hydra
 import numpy as np
 import pandas as pd
 import pydicom
 import SimpleITK as sitk
+from omegaconf import DictConfig, OmegaConf
 from utils import *
 
 warnings.filterwarnings("ignore")
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='T1 fitting')
-    parser.add_argument('--input', type=str, help='input folder')
-    parser.add_argument('--dual', type=bool, default=False,
-                        help='True for the use of dual exponential model')
-    parser.add_argument('--weight', type=bool, default=False)
-    parser.add_argument('--threshold', type=int, default=2000)
-    parser.add_argument('--minus', type=int, default=44000,
-                        help='minus value for acquisition time')
-    parser.add_argument('--clean', type=bool, default=False)
-    parser.add_argument('--verbose', type=bool, default=False,
-                        help='Use ImgShow to visualize the results')
-    parser.add_argument('--label', type=str, default='CE9')
-    args = parser.parse_args()
+# A logger for this file
+hydralog = logging.getLogger(__name__)
 
-    # __file__ = args.input
-    __file__ = '/Users/mona/Library/CloudStorage/GoogleDrive-xinqili16@g.ucla.edu/My Drive/Registration/patient_Liting_dDCE_Mona/017'
+
+@hydra.main(version_base=None, config_path="conf", config_name="config_phase2")
+def main(cfg: DictConfig):
+    conf = OmegaConf.structured(OmegaConf.to_container(cfg, resolve=True))
+    hydralog.info(f"Conf: {conf}")
+
+    __file__ = conf.input
+    # __file__ = '/Users/mona/Library/CloudStorage/Box-Box/Mona/patient_registration_LiTing_Mona/015'
     time_path = os.path.join(__file__, 'acquisitionTime.csv')
     ac_time_df = pd.read_csv(time_path)
     ac_time_dict = ac_time_df.set_index('Subject').to_dict()['AcquisitionTime']
 
     key = "PostconT1"
-    label = args.label
+    label = conf.label
     post_key = f"T1_*{label}*"
 
-    if not args.dual:
+    isDual = False
+    if conf.exp == "single":
+        hydralog.info(f"Use the single exponential model")
         outputfolder = f"{__file__}/registration/{label}/single_exp"
-    else:
-        print(f"Use the dual exponential model, {args.dual}")
+    elif conf.exp == "dual":
+        isDual = True
+        hydralog.info(f"Use the dual exponential model")
         outputfolder = f"{__file__}/registration/{label}/dual_exp"
-    
-    if args.clean:
+    else:
+        raise ValueError("The experiment type is not defined")
+
+    if conf.clean:
+        hydralog.info(f"Clean the folder {outputfolder}")
         shutil.rmtree(outputfolder, ignore_errors=True)
 
-        shutil.rmtree(f"{outputfolder}/stage1", ignore_errors=True)
-        shutil.rmtree(f"{outputfolder}/stage2", ignore_errors=True)
-        os.makedirs(f"{outputfolder}/stage1", exist_ok=True)
-        os.makedirs(f"{outputfolder}/stage2", exist_ok=True)
+    os.makedirs(f"{outputfolder}/stage1", exist_ok=True)
+    os.makedirs(f"{outputfolder}/stage2", exist_ok=True)
 
-    rang = 128 // 2
-    
+    rang = conf.FOV // 2
 
     postT1w = {}
-    
-    print(glob.glob(os.path.join(__file__, f'{key}/{post_key}')))
+
+    hydralog.debug(glob.glob(os.path.join(__file__, f'{key}/{post_key}')))
     for file in glob.glob(os.path.join(__file__, f'{key}/{post_key}')):
         scans = glob.glob(os.path.join(file, '*.dcm'))[0]
         subject = Path(file).stem
@@ -71,49 +72,47 @@ if __name__ == '__main__':
     postT1w = OrderedDict(sorted(postT1w.items(), key=lambda t: t[1][1]))
     ordered_frames = [img for img, _, _ in postT1w.values()]
     ordered_times = [time for _, time, _ in postT1w.values()]
-    orig_frames = np.dstack(ordered_frames)  # orig_frames is already sorted based on the key
+    # orig_frames is already sorted based on the key
+    orig_frames = np.dstack(ordered_frames)
     # cropped the images at the center
-    if args.verbose:
-        sitk.Show(sitk.GetImageFromArray(
-            orig_frames.transpose(2, 0, 1)), 'Original Image')
-        print(f"Original image size {orig_frames.shape}")
+
     x = orig_frames.shape[0]//2
     y = orig_frames.shape[1]//2
     cropped_frames = orig_frames[x-rang:x+rang, y-rang:y+rang, :]
-    if args.verbose:
-        sitk.Show(sitk.GetImageFromArray(
-            cropped_frames.transpose(2, 0, 1)), 'Cropped Image')
-        print(f"Cropped image size {cropped_frames.shape}")
+    # sitk.Show(sitk.GetImageFromArray(
+    #     orig_frames.transpose(2, 0, 1)), 'Original Image')
+    # sitk.Show(sitk.GetImageFromArray(
+    #     cropped_frames.transpose(2, 0, 1)), 'Cropped Image')
+    hydralog.debug(f"Original image size {orig_frames.shape}")
+    hydralog.debug(f"Cropped image size {cropped_frames.shape}")
 
-    ac_time = np.array(ordered_times)
-
-    ac_time = ac_time - args.minus
+    ac_time = np.array(ordered_times) - conf.base_actime
 
     if os.path.exists(f"{outputfolder}/register_stage1.npy"):
-        print("Load the registered images")
+        hydralog.info("Load the pre-registered images")
         matrix_stage1 = np.load(f"{outputfolder}/register_stage1.npy")
         matrix_stage2 = np.load(f"{outputfolder}/register_stage2.npy")
     else:
 
-        cropped_frames[cropped_frames >= args.threshold] = 0
+        cropped_frames[cropped_frames >= conf.threshold] = 0
 
         T1_intra, T1err_intra, registered_intra, update_M_intra = round_optimize_stage2(
-            cropped_frames.astype(np.float32), ac_time.astype(np.uint16), 
-            dual=args.dual, 
+            cropped_frames.astype(np.float32), ac_time.astype(np.uint16),
+            dual=isDual,
             step_size=0.005,
-            threshold=args.threshold, 
+            threshold=conf.threshold,
             rounds=3)
 
         matrix_stage1 = cropped_frames
         matrix_stage2 = registered_intra[-1]
 
-        matrix_stage1[matrix_stage1 >= args.threshold] = 0
-        matrix_stage2[matrix_stage2 >= args.threshold] = 0
+        matrix_stage1[matrix_stage1 >= conf.threshold] = 0
+        matrix_stage2[matrix_stage2 >= conf.threshold] = 0
 
         np.save(f"{outputfolder}/register_stage1.npy", matrix_stage1)
-        np.save(f"{outputfolder}/register_stage2.npy", matrix_stage1)
+        np.save(f"{outputfolder}/register_stage2.npy", matrix_stage2)
 
-    if args.verbose:
+    if conf.verbose:
         sitk.Show(sitk.GetImageFromArray(
             matrix_stage1.transpose(2, 0, 1)), 'Stage1')
         sitk.Show(sitk.GetImageFromArray(
@@ -146,6 +145,9 @@ if __name__ == '__main__':
         os.makedirs(f"{outputfolder}/stage2/{subject}", exist_ok=True)
         img.save_as(os.path.join(
             f"{outputfolder}/stage2/{subject}", f"{subject}" + '.dcm'))
-    
-        print(f"Save the subject {subject}, index {idx}")
 
+        hydralog.info(f"Save the subject {subject}, index {idx}")
+
+
+if __name__ == "__main__":
+    main()

@@ -2,7 +2,12 @@
 *.ima
 *.mat
 *.pdf
-data/*
+outputs/*
+
+# ignore the ipynb files
+*.ipynb
+# ignore log
+*.log
 
 # ignore DCE
 DCE_Original/*

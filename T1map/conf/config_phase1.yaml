@@ -1,0 +1,14 @@
+defaults:
+  - override hydra/job_logging: colorlog
+  - override hydra/hydra_logging: colorlog
+
+input: /Users/mona/Library/CloudStorage/Box-Box/NguyenKl_Fmbv - 6910722222602
+output: /Users/mona/Documents/data/registration/NguyenKl_Fmbv_Mona
+
+exp: single
+threshold: 2000
+base_actime: 44000
+FOV: 128
+
+clean: True
+verbose: False
