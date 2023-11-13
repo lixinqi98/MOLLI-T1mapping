@@ -1,19 +1,20 @@
 import argparse
 import glob
+import logging
 import os
 import re
 import shutil
 import warnings
-from pathlib import Path
 from collections import OrderedDict
+from pathlib import Path
+
+import hydra
 import numpy as np
 import pandas as pd
 import pydicom
 import SimpleITK as sitk
-from utils import *
-import logging
-import hydra
 from omegaconf import DictConfig, OmegaConf
+from utils import *
 
 warnings.filterwarnings("ignore")
 warnings.simplefilter(action='ignore', category=RuntimeWarning)
@@ -27,7 +28,6 @@ hydralog = logging.getLogger(__name__)
 def main(cfg: DictConfig):
     conf = OmegaConf.structured(OmegaConf.to_container(cfg, resolve=True))
     hydralog.info(f"Conf: {conf}")
-
 
     __file__ = conf.input
     # __file__ = '/Users/mona/Library/CloudStorage/Box-Box/Mona/patient_registration_LiTing_Mona/015'
@@ -49,7 +49,7 @@ def main(cfg: DictConfig):
         outputfolder = f"{__file__}/registration/{label}/dual_exp"
     else:
         raise ValueError("The experiment type is not defined")
-    
+
     if conf.clean:
         hydralog.info(f"Clean the folder {outputfolder}")
         shutil.rmtree(outputfolder, ignore_errors=True)
@@ -58,10 +58,9 @@ def main(cfg: DictConfig):
     os.makedirs(f"{outputfolder}/stage2", exist_ok=True)
 
     rang = conf.FOV // 2
-    
 
     postT1w = {}
-    
+
     hydralog.debug(glob.glob(os.path.join(__file__, f'{key}/{post_key}')))
     for file in glob.glob(os.path.join(__file__, f'{key}/{post_key}')):
         scans = glob.glob(os.path.join(file, '*.dcm'))[0]
@@ -73,19 +72,19 @@ def main(cfg: DictConfig):
     postT1w = OrderedDict(sorted(postT1w.items(), key=lambda t: t[1][1]))
     ordered_frames = [img for img, _, _ in postT1w.values()]
     ordered_times = [time for _, time, _ in postT1w.values()]
-    orig_frames = np.dstack(ordered_frames)  # orig_frames is already sorted based on the key
+    # orig_frames is already sorted based on the key
+    orig_frames = np.dstack(ordered_frames)
     # cropped the images at the center
-    if conf.verbose:
-        sitk.Show(sitk.GetImageFromArray(
-            orig_frames.transpose(2, 0, 1)), 'Original Image')
-        hydralog.debug(f"Original image size {orig_frames.shape}")
+
     x = orig_frames.shape[0]//2
     y = orig_frames.shape[1]//2
     cropped_frames = orig_frames[x-rang:x+rang, y-rang:y+rang, :]
-    if conf.verbose:
-        sitk.Show(sitk.GetImageFromArray(
-            cropped_frames.transpose(2, 0, 1)), 'Cropped Image')
-        hydralog.debug(f"Cropped image size {cropped_frames.shape}")
+    # sitk.Show(sitk.GetImageFromArray(
+    #     orig_frames.transpose(2, 0, 1)), 'Original Image')
+    # sitk.Show(sitk.GetImageFromArray(
+    #     cropped_frames.transpose(2, 0, 1)), 'Cropped Image')
+    hydralog.debug(f"Original image size {orig_frames.shape}")
+    hydralog.debug(f"Cropped image size {cropped_frames.shape}")
 
     ac_time = np.array(ordered_times) - conf.base_actime
 
@@ -98,10 +97,10 @@ def main(cfg: DictConfig):
         cropped_frames[cropped_frames >= conf.threshold] = 0
 
         T1_intra, T1err_intra, registered_intra, update_M_intra = round_optimize_stage2(
-            cropped_frames.astype(np.float32), ac_time.astype(np.uint16), 
-            dual=isDual, 
+            cropped_frames.astype(np.float32), ac_time.astype(np.uint16),
+            dual=isDual,
             step_size=0.005,
-            threshold=conf.threshold, 
+            threshold=conf.threshold,
             rounds=3)
 
         matrix_stage1 = cropped_frames
@@ -111,7 +110,7 @@ def main(cfg: DictConfig):
         matrix_stage2[matrix_stage2 >= conf.threshold] = 0
 
         np.save(f"{outputfolder}/register_stage1.npy", matrix_stage1)
-        np.save(f"{outputfolder}/register_stage2.npy", matrix_stage1)
+        np.save(f"{outputfolder}/register_stage2.npy", matrix_stage2)
 
     if conf.verbose:
         sitk.Show(sitk.GetImageFromArray(
@@ -146,7 +145,7 @@ def main(cfg: DictConfig):
         os.makedirs(f"{outputfolder}/stage2/{subject}", exist_ok=True)
         img.save_as(os.path.join(
             f"{outputfolder}/stage2/{subject}", f"{subject}" + '.dcm'))
-    
+
         hydralog.info(f"Save the subject {subject}, index {idx}")
 
 

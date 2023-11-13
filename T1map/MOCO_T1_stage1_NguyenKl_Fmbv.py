@@ -55,7 +55,7 @@ def main(cfg: DictConfig):
     # create the
     rang = conf.FOV // 2
 
-    subjects = sorted(glob.glob(os.path.join(__input_base__, 'T1*')))
+    subjects = sorted(glob.glob(os.path.join(__input_base__, '*bSSFP*')))
     for file in subjects:
         hydralog.info(f"{Path(file).name} in processing")
         output_folder = f"{__output_base__}/{Path(file).name}_MOCO"
@@ -78,7 +78,7 @@ def main(cfg: DictConfig):
                 img = pydicom.dcmread(scan)
                 subject = Path(scan).stem
                 T1w_scans.append(img.pixel_array)
-                inversiontime = float(img[0x2005, 0x1572].value)
+                inversiontime = float(img.InversionTime)
                 tvec.append(inversiontime)
                 hydralog.debug(
                     f"The {subject} has inversion time {inversiontime}")
@@ -126,7 +126,7 @@ def main(cfg: DictConfig):
             img.PixelData = img_data.tobytes()
 
             subjectname = Path(file).name
-            if 'POST' in subjectname:
+            if 'post' in subjectname:
                 output_folder_T1 = f"{postconT1_output_base}/{subjectname}_T1_Mona"
                 os.makedirs(output_folder_T1, exist_ok=True)
                 img.save_as(f"{output_folder_T1}/{subjectname}_T1MAP.dcm")
