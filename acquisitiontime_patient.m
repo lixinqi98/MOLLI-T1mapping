@@ -1,8 +1,8 @@
 %% load Dicom
-subjectfolder='/Users/mona/Library/CloudStorage/GoogleDrive-xinqili16@g.ucla.edu/My Drive/Registration/patient_Liting_dDCE_Mona';
+subjectfolder='/Users/mona/Library/CloudStorage/Box-Box/Mona/patient_registration_LiTing_Mona';
 
 
-PostconFoldername=[subjectfolder,'/075'];
+PostconFoldername=[subjectfolder,'/019'];
 listPost=dir(sprintf('%s/PostconT1/*_MAP_T1_Mona', PostconFoldername));
 timeino_map = containers.Map();
 for n=1:length(listPost)
