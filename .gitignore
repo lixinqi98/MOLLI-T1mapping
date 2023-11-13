@@ -2,6 +2,7 @@
 *.ima
 *.mat
 *.pdf
+data/*
 
 # ignore DCE
 DCE_Original/*
