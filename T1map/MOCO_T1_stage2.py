@@ -37,7 +37,7 @@ def main(cfg: DictConfig):
 
     key = "PostconT1"
     label = conf.label
-    post_key = f"T1_*{label}*"
+    post_key = f"*{label}*"
 
     isDual = False
     if conf.exp == "single":
