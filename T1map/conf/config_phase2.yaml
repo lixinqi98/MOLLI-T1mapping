@@ -2,13 +2,14 @@ defaults:
   - override hydra/job_logging: colorlog
   - override hydra/hydra_logging: colorlog
 
-input: /Users/mona/Library/CloudStorage/GoogleDrive-xinqili16@g.ucla.edu/My Drive/Registration/NguyenKl_Fmbv_Mona
-label: SA_A
+input: /Users/mona/Library/CloudStorage/GoogleDrive-xinqili16@g.ucla.edu/My Drive/Data/Registration/patient_registration_LiTing_Mona/019
+label: CE9
 
-exp: single
+type: single_exp
 threshold: 2000
-base_actime: 0
+base_actime: 34000
 FOV: 128
+rounds: 3
 
 clean: True
 verbose: True

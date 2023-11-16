@@ -40,13 +40,15 @@ def main(cfg: DictConfig):
     post_key = f"*{label}*"
 
     isDual = False
-    if conf.exp == "single":
+    if conf.type == "single_exp":
         hydralog.info(f"Use the single exponential model")
         outputfolder = f"{__file__}/registration/{label}/single_exp"
-    elif conf.exp == "dual":
-        isDual = True
+    elif conf.type == "dual":
         hydralog.info(f"Use the dual exponential model")
         outputfolder = f"{__file__}/registration/{label}/dual_exp"
+    elif conf.type == "linear":
+        hydralog.info(f"Use the linear model")
+        outputfolder = f"{__file__}/registration/{label}/linear"
     else:
         raise ValueError("The experiment type is not defined")
 
@@ -86,7 +88,8 @@ def main(cfg: DictConfig):
     hydralog.debug(f"Original image size {orig_frames.shape}")
     hydralog.debug(f"Cropped image size {cropped_frames.shape}")
 
-    ac_time = np.array(ordered_times) - conf.base_actime
+    # ac_time = np.array(ordered_times) - conf.base_actime
+    ac_time = np.array(ordered_times) - np.min(ordered_times)
 
     if os.path.exists(f"{outputfolder}/register_stage1.npy"):
         hydralog.info("Load the pre-registered images")
@@ -98,10 +101,10 @@ def main(cfg: DictConfig):
 
         T1_intra, T1err_intra, registered_intra, update_M_intra = round_optimize_stage2(
             cropped_frames.astype(np.float32), ac_time.astype(np.uint16),
-            dual=isDual,
-            step_size=0.005,
+            type=conf.type,
+            step_size=-0.1,
             threshold=conf.threshold,
-            rounds=3)
+            rounds=conf.rounds)
 
         matrix_stage1 = cropped_frames
         matrix_stage2 = registered_intra[-1]

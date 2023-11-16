@@ -61,11 +61,12 @@ def round_optimize_stage1(frames, tvec, threshold=2000, rounds=3):
     return T1s, T1errs, registereds, update_Ms
 
 
-def round_optimize_stage2(frames, tvec, dual=False, step_size=0.01, threshold=2000, rounds=3):
+def round_optimize_stage2(frames, tvec, type, step_size=0.01, threshold=2000, rounds=3):
     T1s = []
     T1errs = []
     registereds = []
     update_Ms = []
+    params = []
 
     I = copy.copy(frames)
     I[I >= 2000] = 0
@@ -75,8 +76,12 @@ def round_optimize_stage2(frames, tvec, dual=False, step_size=0.01, threshold=20
 
         tvec_r = tvec
         frames_r = registered_r
-        inversion_recovery_img, T1, T1err = t1fitting_intra(
-            frames_r, tvec_r, tvec, dual)
+        if type == 'linear':
+            inversion_recovery_img, T1, T1err, fitting_params = t1fitting_linear(
+                frames_r, tvec_r, tvec, type)
+        elif type == 'single_exp':
+            inversion_recovery_img, T1, T1err, fitting_params= t1fitting_intra(
+                frames_r, tvec_r, tvec, type)
 
         S = inversion_recovery_img
         M = np.abs(inversion_recovery_img)
@@ -87,25 +92,12 @@ def round_optimize_stage2(frames, tvec, dual=False, step_size=0.01, threshold=20
         T1errs.append(T1err)
         registereds.append(registered_r)
         update_Ms.append(update_M)
+        params.append(fitting_params)
+    
+    # check the fitting
+    plot_linearfitting(rounds, tvec, 50, 50, registereds, params, type)
     return T1s, T1errs, registereds, update_Ms
 
-
-def load_orig_file(mat_fname):
-    mat_contents = sio.loadmat(mat_fname)
-    tvec = np.squeeze(mat_contents['tvec']).astype(np.float32)
-    frames = np.squeeze(mat_contents['img']).astype(np.float32)
-    return tvec, frames
-
-
-def view(img):
-    img = sitk.GetImageFromArray(img.transpose(2, 1, 0))
-    image_viewer = sitk.ImageViewer()
-    image_viewer.SetTitle('grid using ImageViewer class')
-
-    image_viewer.SetApplication(
-        '/Applications/ITK-SNAP.app/Contents/MacOS/ITK-SNAP')
-    # image_viewer.SetApplication('/Applications/Fiji.app/Contents/MacOS/ImageJ-macosx')
-    image_viewer.Execute(img)
 
 
 def t1fitting_inter(ini_frames, ini_tvec, tvec):
@@ -124,8 +116,8 @@ def t1fitting_inter(ini_frames, ini_tvec, tvec):
     return inversion_recovery_img, t1, sqerrormap
 
 
-def t1fitting_intra(ini_frames, ini_tvec, tvec, dual=False):
-    t1_params_pre, sqerrormap = t1_intra.calculate_T1map(ini_frames, ini_tvec, dual)
+def t1fitting_intra(ini_frames, ini_tvec, tvec, type='single_exp'):
+    t1_params_pre, sqerrormap = t1_intra.calculate_T1map(ini_frames, ini_tvec, type)
 
     a = t1_params_pre[:, :, 0]
     b = t1_params_pre[:, :, 1] + 1e-10
@@ -138,16 +130,33 @@ def t1fitting_intra(ini_frames, ini_tvec, tvec, dual=False):
     for i in range(tvec.shape[-1]):
         x = tvec[i]
         inversion_recovery_img[..., i] = a * (1 - np.exp(-(x / b))) + c
-    return inversion_recovery_img, t1, sqerrormap
+    return inversion_recovery_img, t1, sqerrormap, t1_params_pre
+
+
+def t1fitting_linear(ini_frames, ini_tvec, tvec, type='linear'):
+    # fit the model y = ax + b
+    t1_params_pre, sqerrormap = t1_intra.calculate_T1map(ini_frames, ini_tvec, type)
+
+    a = t1_params_pre[:, :, 0]
+    b = t1_params_pre[:, :, 1]
+    
+    t1 = a / (b + 1e-5)
+
+    inversion_recovery_img = np.zeros(
+        (ini_frames.shape[0], ini_frames.shape[1], tvec.shape[-1]))
+    for i in range(tvec.shape[-1]):
+        x = tvec[i]
+        inversion_recovery_img[..., i] = a * x + b
+    return inversion_recovery_img, t1, sqerrormap, t1_params_pre
 
 
 def synthetic(I, S, M, threshold, step_size=-0.1, iter=3, alpha=1, beta=1):
     opt = Optimize(threshold)
-    energy = opt.energy(M, I, S) / np.size(M)
+    energy = opt.energy(M, I, S, alpha, beta) / np.size(M)
     for itr in range(iter):
         step = opt.energy_derivative(M, I, S, alpha=alpha, beta=beta)
         new_M = M + step_size * step
-        new_energy = opt.energy(new_M, I, S) / np.size(M)
+        new_energy = opt.energy(new_M, I, S, alpha, beta) / np.size(M)
         hydralog.info(
             f"Iteration {itr}: energy = {new_energy:.3f}, diff = {abs(new_energy - energy):.3f}, step = {np.sum(step):.3f}")
         if new_energy > energy:
@@ -159,7 +168,7 @@ def synthetic(I, S, M, threshold, step_size=-0.1, iter=3, alpha=1, beta=1):
 
 def register(fixed, moving):
     registered = np.zeros_like(fixed)
-    threshold = 500
+    threshold = 1000
     for slice in range(fixed.shape[2]):
         
         diff = moving[:, :, slice] - fixed[:, :, slice]
@@ -173,3 +182,23 @@ def register(fixed, moving):
             fixed=im1, moving=im2, type_of_transform='SyN')
         registered[:, :, slice] = reg12['warpedmovout'].numpy()
     return registered
+
+
+def plot_linearfitting(rounds, time, x, y, registereds, params, type):
+    fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+    colors = ['r', 'g', 'b', 'm', 'c', 'y']
+    for i in range(rounds):
+        img = registereds[i]
+        yf = img[x, y, :]
+        ax.plot(time, yf, 'o', label='data', color=colors[i])
+        popt = params[i]
+        if type == 'single_exp':
+            a1, b1, c1 = popt[x, y, 0], popt[x, y, 1], popt[x, y, 2]
+
+            yf_est = a1 * (1 - np.exp(- (time / b1))) + c1
+        elif type == 'linear':
+            a1, b1 = popt[x, y, 0], popt[x, y, 1]
+            yf_est = a1 * time + b1
+        ax.plot(time, yf_est, label='fit', color=colors[i])
+    ax.legend()
+    plt.show()
